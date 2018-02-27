@@ -113,7 +113,7 @@ void MyView::windowViewWillStart(tygra::Window * window)
 	for (const sponza::Mesh& mesh : allSponzaMeshes) {
 		unsigned int instancesCount = (unsigned int)this->scene_->getInstancesByMeshId(mesh.getId()).size();
 		if (m_maxInstancesNum < instancesCount) {
-			m_maxInstancesNum = instancesCount);
+			m_maxInstancesNum = instancesCount;
 		}
 
 		//Get the data from 
