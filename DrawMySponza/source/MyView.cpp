@@ -290,7 +290,7 @@ void MyView::windowViewRender(tygra::Window * window)
 	//Create projection and view matrices
 	const sponza::Camera& camera = this->scene_->getCamera();
 	glm::mat4 projection_matrix = glm::perspective(glm::radians(camera.getVerticalFieldOfViewInDegrees()), this->m_aspect_ratio, camera.getNearPlaneDistance(), camera.getFarPlaneDistance());
-	glm::mat4 view_matrix = glm::lookAt((*(glm::vec3*)&camera.getPosition()), (*(glm::vec3*)&camera.getPosition()) + (*(glm::vec3*)&camera.getDirection()), (*(glm::vec3*)&this->scene_->getUpDirection()));
+	glm::mat4 view_matrix = glm::lookAt((glm::vec3&)camera.getPosition(), (glm::vec3&)camera.getPosition() + (glm::vec3&)camera.getDirection(), (glm::vec3&)this->scene_->getUpDirection());
 
 	//Activate the shader program
 	glUseProgram(this->m_sponza_shader_program);
@@ -302,11 +302,40 @@ void MyView::windowViewRender(tygra::Window * window)
 	//View matrix
 	GLuint view_model_id = glGetUniformLocation(this->m_sponza_shader_program, "view_matrix");
 	glUniformMatrix4fv(view_model_id, 1, GL_FALSE, glm::value_ptr(view_matrix));
+	//Camera position
+	GLuint camera_pos_id = glGetUniformLocation(this->m_sponza_shader_program, "camera_position");
+	glUniform3fv(this->m_sponza_shader_program, 1, glm::value_ptr((glm::vec3&)this->scene_->getCamera().getPosition()));
+	//light info
+	//Ambient
+	GLuint ambien_light_intensity = glGetUniformLocation(this->m_sponza_shader_program, "ambient_light_intensity");
+	glUniform3fv(ambien_light_intensity, 1, glm::value_ptr((glm::vec3&)this->scene_->getAmbientLightIntensity()));
+
+	//Light
+	std::vector<sponza::Light> lights = this->scene_->getAllLights();
+	GLuint count_id = glGetUniformLocation(this->m_sponza_shader_program, "lightsCount");
+	glUniform1i(count_id, lights.size());
+	for (int i = 0; i < lights.size(); i++) {
+		sponza::Light& l = lights[i];
+		GLuint pos = glGetUniformLocation(this->m_sponza_shader_program, ("light_sources["+std::to_string(i)+"].position").c_str());
+		GLuint range = glGetUniformLocation(this->m_sponza_shader_program, ("light_sources[" + std::to_string(i) + "].range").c_str());
+		GLuint intensity = glGetUniformLocation(this->m_sponza_shader_program, ("light_sources[" + std::to_string(i) + "].intensity").c_str());
+	    glUniform3fv(pos, 1, glm::value_ptr((glm::vec3&)l.getPosition()));
+		glUniform3fv(intensity, 1, glm::value_ptr((glm::vec3&)l.getIntensity()));
+		glUniform1f(range, l.getRange());
+	}
+	
+
 	//Textyre unit (need to activate it first)
 	glActiveTexture(GL_TEXTURE0 + HEXSampler);
 	glBindTexture(GL_TEXTURE_2D, this->m_texture);
 	GLuint hexTextureSampler = glGetUniformLocation(this->m_sponza_shader_program, "hexTexture_sampler");
 	glUniform1i(hexTextureSampler, HEXSampler);
+
+	//Get the uniform location for the material
+	GLuint material_diffuse = glGetUniformLocation(this->m_sponza_shader_program, "material_data.diffuse_colour");
+	GLuint material_specular = glGetUniformLocation(this->m_sponza_shader_program, "material_data.specular_colour");
+	GLuint material_shininess = glGetUniformLocation(this->m_sponza_shader_program, "material_data.shininess");
+
 
 	//Draw meshes
 	glBindVertexArray(this->m_vao);
@@ -323,13 +352,19 @@ void MyView::windowViewRender(tygra::Window * window)
 		std::vector<glm::mat4> instancesTransformations;
 		instancesTransformations.reserve(instancesIDs.size());
 		for (unsigned int instanceID : instancesIDs) {
-			instancesTransformations.push_back(glm::mat4(*((glm::mat4x3*)&this->scene_->getInstanceById(instanceID).getTransformationMatrix())));
+			instancesTransformations.push_back(glm::mat4((glm::mat4x3&)this->scene_->getInstanceById(instanceID).getTransformationMatrix()));
 		}
 
 		//Fill the instance data matrix with the current instance data
 		glBindBuffer(GL_UNIFORM_BUFFER, this->m_instances_modelView_vbo);
 		glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4) * instancecount, instancesTransformations.data());
 		glBindBuffer(GL_UNIFORM_BUFFER, S_NullID);
+
+		//Pass material
+		sponza::Material material = this->scene_->getMaterialById(this->scene_->getInstanceById(instancesIDs.front()).getMaterialId());
+		glUniform3fv(material_diffuse, 1, glm::value_ptr((glm::vec3&)material.getDiffuseColour()));
+		glUniform3fv(material_shininess, 1, glm::value_ptr((glm::vec3&)material.getSpecularColour()));
+		glUniform1f(material_shininess, material.getShininess());
 
 		//Draw instanceCount of the current mesh usng the matrix data
 		glDrawElementsInstancedBaseVertex(GL_TRIANGLES, meshInfo.element_count, GL_UNSIGNED_INT, (const void*)(sizeof(unsigned int) * meshInfo.first_element_index), instancecount, meshInfo.first_vertex_index);

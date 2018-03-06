@@ -1,3 +1,5 @@
+Petric Marcinkowski (s6073335)
+
 # Draw My Sponza
 
 An exercise to draw a complete 3d scene using OpenGL 3.3 for my graphics
